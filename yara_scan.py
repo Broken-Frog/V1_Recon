@@ -140,7 +140,7 @@ def _build_hash_to_path(extracted_dir: Path) -> Dict[str, Path]:
 def _cluster_and_score(rule_names: List[str]) -> Dict:
     clusters = set()
     score = 0
-    
+
     for rule in rule_names:
         rule_lower = rule.lower()
         if "ransomware" in rule_lower or "mass_file_encryption" in rule_lower or "shadow_delete" in rule_lower:
@@ -167,7 +167,7 @@ def _cluster_and_score(rule_names: List[str]) -> Dict:
         else:
             clusters.add("Suspicious/Generic")
             score = max(score, 20)
-            
+
     return {
         "raw_rules": rule_names,
         "clusters": list(clusters),

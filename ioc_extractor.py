@@ -37,7 +37,6 @@ Optional env vars (all have sensible defaults — see config.py)
 import logging
 import sys
 import time
-from pathlib import Path
 
 # ── Bootstrap logging BEFORE importing any project module so all loggers
 #    (including those created at module import time) inherit the config.

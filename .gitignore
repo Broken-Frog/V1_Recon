@@ -2,7 +2,7 @@
 *.log
 env/
 *.pcap
-__pychache_
+__pycache__/
 extracted_payloads/
 frontend/
 api/
@@ -11,3 +11,4 @@ processed/
 phase2_output/
 *.pdf
 docs/Research/*
+api.sh

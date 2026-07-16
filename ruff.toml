@@ -1,0 +1,21 @@
+# Ruff configuration file
+
+# Exclude a variety of common directories and helper scripts
+exclude = [
+    ".git",
+    "env",
+    "venv",
+    "test_enrich.py",
+    "test_hive.py",
+    "test_scoring.py",
+    "check_ips.py",
+    "update_feeds.py",
+]
+
+line-length = 120
+
+[lint]
+# Enable standard Pyflakes (F) and Pycodestyle (E, W) codes
+select = ["F", "E", "W"]
+# Ignore E701 (multiple statements on one line) and E722 (bare except) if they show up in any legacy parts
+ignore = ["E701", "E722", "E501", "E402"]

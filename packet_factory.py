@@ -35,7 +35,7 @@ from typing import Dict, Optional, Tuple
 def create_zeek_local_script() -> str:
     """Return content for temporary local.zeek script."""
     return (
-        "@load frameworks/intel\n"
+       # "@load frameworks/intel\n"
         "@load frameworks/files/extract-all-files\n"
         "redef LogAscii::use_json = T;\n"
     )
@@ -439,14 +439,14 @@ def build_file_linker(
     zeek_dir = zeek_dir.resolve()
     extracted_dir = extracted_dir.resolve()
     output_json = output_json.resolve()
-    
+
     files_json = zeek_dir / "files.json"
     if not files_json.exists():
         print(f"[File Linker] WARNING: files.json not found at {files_json}", flush=True)
         return
-        
+
     linker: Dict[str, Dict[str, str]] = {}
-    
+
     with open(files_json, encoding="utf-8") as fh:
         for raw in fh:
             raw = raw.strip()
@@ -456,7 +456,7 @@ def build_file_linker(
                 extracted_name = rec.get("extracted")
                 # Zeek's files.json usually uses 'conn_uids' array or sometimes 'uid'
                 uid = rec.get("uid") or (rec.get("conn_uids", [None])[0] if rec.get("conn_uids") else None)
-                
+
                 if extracted_name and uid:
                     target_file = None
                     if (extracted_dir / extracted_name).exists():
@@ -465,7 +465,7 @@ def build_file_linker(
                         target_file = extracted_dir / f"zeek_{extracted_name}"
                     elif (zeek_dir / "extract_files" / extracted_name).exists():
                         target_file = zeek_dir / "extract_files" / extracted_name
-                        
+
                     if target_file:
                         h = hashlib.sha256()
                         try:
@@ -473,7 +473,7 @@ def build_file_linker(
                                 for chunk in iter(lambda: f.read(65536), b""):
                                     h.update(chunk)
                             sha256_hash = h.hexdigest()
-                            
+
                             linker[sha256_hash] = {
                                 "uid": uid,
                                 "filename": extracted_name
@@ -555,7 +555,7 @@ def combine_extracted_payloads(
                 file_store.rmdir()
             except OSError:
                 pass
-                
+
         # Remove empty zeek extract_files dir if it now exists
         if zeek_extract_dir.is_dir():
             try:
@@ -646,7 +646,7 @@ def main() -> None:
         build_uid_linker(zeek_dir, suri_dir, linker_json, cpu_count)
 
         combine_extracted_payloads(zeek_dir, suri_dir, extracted_dir, cpu_count)
-        
+
         build_file_linker(zeek_dir, extracted_dir, file_linker_json)
 
         print(f"\n✅ Processing complete!  Data lake ready at: {base_dir}", flush=True)

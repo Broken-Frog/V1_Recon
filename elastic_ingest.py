@@ -22,14 +22,14 @@ def ingest_to_elk(json_path: Path):
 
     # Disable security for local dev
     es = Elasticsearch("http://localhost:9200")
-    
+
     if not es.ping():
         print("❌ Could not connect to Elasticsearch at http://localhost:9200")
         print("Make sure your docker-compose is running!")
         return
 
     index_name = "v1_recon-incidents"
-    
+
     actions = []
     # Ingest High Severity
     for inc in data.get("high_severity", []):
@@ -38,7 +38,7 @@ def ingest_to_elk(json_path: Path):
             "_index": index_name,
             "_source": inc
         })
-        
+
     # Ingest Medium Severity
     for inc in data.get("medium_severity", []):
         inc["severity_level"] = "MEDIUM"

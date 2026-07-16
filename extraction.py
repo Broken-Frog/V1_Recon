@@ -11,7 +11,6 @@ import hashlib
 import ipaddress
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
@@ -125,7 +124,7 @@ def _extract_zeek_conn(zeek_dir: Path) -> List[Dict]:
         ts = str(rec.get("ts", ""))
         proto = rec.get("proto", "")
         service = rec.get("service", "")
-        
+
         # Combine proto/service if available (e.g. "tcp/http")
         protocol = service if service and service != "-" else proto
         if not protocol or protocol == "-":
@@ -133,7 +132,7 @@ def _extract_zeek_conn(zeek_dir: Path) -> List[Dict]:
 
         orig_ip = rec.get("id.orig_h", "").strip()
         orig_p = str(rec.get("id.orig_p", "")).strip()
-        
+
         resp_ip = rec.get("id.resp_h", "").strip()
         resp_p = str(rec.get("id.resp_p", "")).strip()
 
@@ -196,7 +195,7 @@ def _extract_zeek_http(zeek_dir: Path) -> List[Dict]:
             iocs.append(_ioc("zeek_http", timestamp=ts, url=url, ip=ip_val, domain=domain_val, port=actual_port, protocol="http"))
         if resp_ip:
             iocs.append(_ioc("zeek_http", timestamp=ts, ip=resp_ip, port=resp_p, protocol="http"))
-            
+
     log.debug("zeek_http: %d raw IOCs", len(iocs))
     return iocs
 
@@ -234,11 +233,11 @@ def _extract_suricata(suri_dir: Path) -> List[Dict]:
             http = event.get("http", {})
             hostname = http.get("hostname", "").strip()
             url_str  = http.get("url", "").strip()
-            
+
             is_ip, clean_host, host_port = _parse_host_port(hostname)
             ip_val = clean_host if is_ip else None
             domain_val = None if is_ip else clean_host
-            
+
             if clean_host:
                 iocs.append(_ioc("suricata_http", timestamp=ts, ip=ip_val, domain=domain_val, port=host_port, protocol="http"))
             if clean_host and url_str:

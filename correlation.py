@@ -11,7 +11,7 @@ build an IP -> Domain -> Session -> File -> Alert relationship.
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Set, Optional
+from typing import Dict, List
 import ipaddress
 import datetime
 from config import VOLUMETRIC_THRESHOLD_DOS, VOLUMETRIC_THRESHOLD_PORT_SCAN
@@ -151,28 +151,28 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
     story_lines = []
     story_lines.append("🧾 ATTACK STORY (AUTO-GENERATED)")
     story_lines.append("=" * 50)
-    
+
     global_flags = {"ransomware": False, "volumetric": False, "c2": False, "malware": False, "exfiltration": False}
     dos_sessions = []
     malware_sessions = []
 
     # Classify roles FIRST — this is used to build the narrative correctly
     host_roles = classify_host_roles(sessions, host_profiles)
-    
+
     for s in sessions.values():
         if s["score"] == 0: continue
         hit_str = " ".join(s.get("intel_hits", []))
-        
+
         is_vol = "Volumetric" in hit_str
         is_rans = "Ransomware" in hit_str
         is_c2 = "C2" in hit_str or "Backdoor" in hit_str
         is_exfil = "Data Exfiltration" in hit_str
         is_mal = "Malicious" in hit_str or s.get("files") or is_rans or is_c2 or "Exploit" in hit_str or "Web Attack" in hit_str or "Downloader" in hit_str or "Injection" in hit_str or is_exfil
-        
+
         if is_vol:
             global_flags["volumetric"] = True
             dos_sessions.append(s)
-            
+
         if not is_vol or (is_vol and is_mal): # if hybrid, it goes to both
             malware_sessions.append(s)
             if is_rans: global_flags["ransomware"] = True
@@ -184,13 +184,13 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
     if global_flags["volumetric"]:
         story_lines.append("\n🚨 VERDICT: Denial of Service (DoS) Attack")
         story_lines.append("Confidence: HIGH")
-        
+
         attackers = set()
         targets = set()
         total_connections = 0
         min_ts = float('inf')
         max_ts = 0
-        
+
         for s in dos_sessions:
             if s.get("orig_h"): attackers.add(s["orig_h"])
             if s.get("resp_h"): targets.add(f"{s['resp_h']}:{s['resp_p']}")
@@ -199,17 +199,17 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
             if ts:
                 if ts < min_ts: min_ts = ts
                 if ts > max_ts: max_ts = ts
-                
+
         duration = max_ts - min_ts if max_ts > min_ts else 1.0
-        
+
         story_lines.append("\n🎯 ATTACK TYPE: Volumetric Flood")
-        
+
         story_lines.append("\n🟥 ATTACKER(S):")
         for a in attackers: story_lines.append(f"- {a}")
-        
+
         story_lines.append("\n🎯 TARGET(S):")
         for t in targets: story_lines.append(f"- {t}")
-        
+
         story_lines.append("\n📊 CHARACTERISTICS:")
         story_lines.append(f"- Total Connections: {total_connections}")
         story_lines.append(f"- Time Window: ~{duration:.2f} seconds burst")
@@ -217,7 +217,7 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
         story_lines.append("- Payload: None")
         story_lines.append("- C2: None")
         story_lines.append("- Persistence: None")
-        
+
         story_lines.append("\n📌 INTERPRETATION:")
         story_lines.append("High-rate connection flood targeting host(s), consistent with DoS behavior.")
         story_lines.append("\n⚠ IMPACT:")
@@ -272,84 +272,84 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
                 "INFECTOR": "☣ INFECTOR",
                 "INFECTED": "💀 INFECTED HOST",
                 "SUSPECTED_PATIENT_ZERO": "🎯 SUSPECTED PATIENT ZERO"
-            }.get(role, f"💻 HOST")
+            }.get(role, "💻 HOST")
 
             hostname_str = f" ({pz.get('hostname', 'Unknown')})"
             pz_story_lines.append(f"\n{role_emoji}: {pz_ip}{hostname_str}")
-            
+
             if role in ("PATIENT_ZERO", "CO_PRIMARY", "SUSPECTED_PATIENT_ZERO"):
                 confidence = "HIGH" if len(role_info.get("lateral_movements", [])) > 0 else "MEDIUM"
                 if role == "SUSPECTED_PATIENT_ZERO": confidence = "LOW"
-                
+
                 pz_story_lines.append(f"  Confidence: {confidence}")
-                pz_story_lines.append(f"  Reason:")
-                
+                pz_story_lines.append("  Reason:")
+
                 if role == "PATIENT_ZERO":
-                    pz_story_lines.append(f"  - Earliest confirmed infection time")
+                    pz_story_lines.append("  - Earliest confirmed infection time")
                 elif role == "CO_PRIMARY":
-                    pz_story_lines.append(f"  - Simultaneous compromise detected with another host")
+                    pz_story_lines.append("  - Simultaneous compromise detected with another host")
                 elif role == "SUSPECTED_PATIENT_ZERO":
-                    pz_story_lines.append(f"  - Shows signs of compromise but lacks clear lateral movement initiation")
-                    
+                    pz_story_lines.append("  - Shows signs of compromise but lacks clear lateral movement initiation")
+
                 lat_moves = role_info.get("lateral_movements", [])
                 if lat_moves:
                     protocols = list(set([p for _, _, p in lat_moves]))
                     pz_story_lines.append(f"  - Initiated {', '.join(protocols)}-based lateral movement")
-                    
+
                 if pz["infection_score"] > 100:
                     pz_story_lines.append(f"  - High malicious activity score ({pz['infection_score']} pts)")
 
             if role_info.get("infected_by"):
                 pz_story_lines.append(f"  ↳ Infected by: {', '.join(role_info['infected_by'])}")
             pz_story_lines.append("-" * 50)
-            
+
             pz_sessions.sort(key=lambda x: x["ts"] or 0)
             stages = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: []}
-            
+
             connections_to_target = {}
             for s in pz_sessions:
-                if s["orig_h"] == pz_ip: 
+                if s["orig_h"] == pz_ip:
                     target = (s["resp_h"], s["resp_p"])
                     connections_to_target.setdefault(target, []).append(s)
-                    
+
             beaconing_targets = {}
             for target, conns in connections_to_target.items():
                 if len(conns) < 2: continue
-                
+
                 score = 0
                 if len(conns) >= 5: score += 20
                 if len(conns) >= 10: score += 40
-                
+
                 intervals = []
                 for i in range(1, len(conns)):
                     intervals.append(conns[i]["ts"] - conns[i-1]["ts"])
-                
+
                 if len(intervals) > 1:
                     std_dev = statistics.stdev(intervals)
                     if std_dev < 2.0: score += 40
-                        
+
                 avg_duration = sum(c.get("duration", 0) for c in conns) / len(conns)
                 if avg_duration < 5.0: score += 20
-                    
+
                 avg_bytes = sum(c.get("orig_bytes", 0) + c.get("resp_bytes", 0) for c in conns) / len(conns)
                 if avg_bytes < 50000: score += 20
-                    
+
                 dns_lookup = False
                 for c in conns:
                     if c.get("dns"): dns_lookup = True
                 if dns_lookup: score += 10
-                    
+
                 known_bad = False
                 for c in conns:
                     hit_str = " ".join(c.get("intel_hits", []))
                     if "C2" in hit_str or "Backdoor" in hit_str or c.get("files"): known_bad = True
                 if known_bad: score += 50
-                    
+
                 beaconing_targets[target] = score
-    
+
             for s in pz_sessions:
                 hit_str = " ".join(s.get("intel_hits", []))
-                
+
                 stage = None
                 if "Web Attack" in hit_str or "Exploit" in hit_str: stage = 1
                 elif "Downloader" in hit_str or s.get("files"): stage = 2
@@ -357,19 +357,19 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
                 elif "C2" in hit_str or "Backdoor" in hit_str: stage = 4
                 elif "Fileless" in hit_str or "Injection" in hit_str or "Lateral Movement" in hit_str: stage = 6
                 elif "Ransomware" in hit_str: stage = 7
-                    
+
                 if s["orig_h"] == pz_ip:
                     target = (s["resp_h"], s["resp_p"])
                     b_score = beaconing_targets.get(target, 0)
                     if b_score >= 80:
                         stage = 5
                         s["beaconing_score"] = b_score
-                        
+
                 if stage: stages[stage].append(s)
-                    
+
             has_story = False
             last_stage_printed = False
-            
+
             stage_names = {
                 1: "[STAGE 1] Initial Access",
                 2: "[STAGE 2] Payload Execution",
@@ -379,62 +379,62 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
                 6: "[STAGE 6] Possible Lateral Movement",
                 7: "[STAGE 7] Impact (Potential)"
             }
-            
+
             for stg_num in range(1, 8):
                 stg_sessions = stages[stg_num]
                 if not stg_sessions: continue
-                
+
                 global_stages.add(stg_num)
                 if last_stage_printed: pz_story_lines.append("\n        ↓\n")
-                
+
                 pz_story_lines.append(stage_names[stg_num])
                 has_story = True
                 last_stage_printed = True
-                
+
                 if stg_num == 1:
                     pz_story_lines.append(f"Host {pz_ip} likely compromised via attack.")
-                    pz_story_lines.append(f"Indicators:")
+                    pz_story_lines.append("Indicators:")
                     for s in stg_sessions[:3]: pz_story_lines.append(f"- {s.get('intel_hits', ['Exploitation Attempt'])[0]}")
                 elif stg_num == 2:
                     files = list(set([f for s in stg_sessions for f in s.get("files", [])]))
                     new_files = [f for f in files if f not in global_seen_stage2_hashes]
-                    
+
                     if not new_files and files:
                         pz_story_lines.append(f"Malicious payload executed on host (Previously seen hash: {files[0][:8]}...)")
                     else:
-                        pz_story_lines.append(f"Malicious payload executed on host.")
-                        if new_files: 
+                        pz_story_lines.append("Malicious payload executed on host.")
+                        if new_files:
                             pz_story_lines.append(f"Hash: {new_files[0][:8]}...")
                             global_seen_stage2_hashes.update(new_files)
-                            
-                    pz_story_lines.append(f"Indicators:")
+
+                    pz_story_lines.append("Indicators:")
                     for s in stg_sessions[:3]: pz_story_lines.append(f"- {s.get('intel_hits', ['Malicious File Transfer'])[0]}")
                 elif stg_num == 3:
                     domains = list(set([d.get("query") for s in stg_sessions for d in s.get("dns", []) if d.get("query")]))
-                    pz_story_lines.append(f"Host begins DNS queries resolving attacker infrastructure.")
+                    pz_story_lines.append("Host begins DNS queries resolving attacker infrastructure.")
                     for d in domains[:3]: pz_story_lines.append(f"→ {d}")
                 elif stg_num == 4:
                     ips = list(set([s["resp_h"] for s in stg_sessions]))
-                    pz_story_lines.append(f"Host communicates with external server:")
+                    pz_story_lines.append("Host communicates with external server:")
                     for ip in ips[:3]: pz_story_lines.append(f"- {ip} (known malicious)")
                 elif stg_num == 5:
                     unique_targets = set([(s["resp_h"], s["resp_p"], s.get("beaconing_score", 0)) for s in stg_sessions])
-                    pz_story_lines.append(f"Repeated outbound connections observed:")
+                    pz_story_lines.append("Repeated outbound connections observed:")
                     for target in list(unique_targets)[:3]: pz_story_lines.append(f"{pz_ip} → {target[0]}:{target[1]} (Beaconing Score: {target[2]})")
                 elif stg_num == 6:
                     internal_targets = set([s["resp_h"] for s in stg_sessions])
-                    pz_story_lines.append(f"Secondary host(s) involved:")
+                    pz_story_lines.append("Secondary host(s) involved:")
                     for ip in list(internal_targets)[:3]: pz_story_lines.append(f"- {ip} shows similar suspicious behavior")
                 elif stg_num == 7:
-                    pz_story_lines.append(f"Indicators of:")
+                    pz_story_lines.append("Indicators of:")
                     for s in stg_sessions[:3]: pz_story_lines.append(f"- {s.get('intel_hits', ['Impact Activity'])[0]}")
-    
+
             if not has_story:
                 pz_story_lines.append("No clear stage progression detected for this host, but suspicious activity logged.")
             else:
                 affected_hosts.append(pz_ip)
                 if pz["infection_score"] > max_score: max_score = pz["infection_score"]
-                
+
         verdict = "Suspicious network activity detected."
         if global_flags["exfiltration"] and (global_flags["ransomware"] or global_flags["c2"]):
             verdict = "Internal compromise with active data exfiltration"
@@ -454,11 +454,11 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
             verdict = "Malicious payload execution"
         elif 1 in global_stages:
             verdict = "Initial access / Exploitation attempt"
-    
+
         confidence = "LOW"
         if max_score > 200: confidence = "HIGH"
         elif max_score > 100: confidence = "MEDIUM"
-        
+
         story_lines.append("\n🚨 VERDICT: " + verdict)
         story_lines.append(f"Confidence: {confidence}")
         story_lines.append(f"Affected Hosts: {', '.join(affected_hosts) if affected_hosts else 'None'}\n")
@@ -475,12 +475,12 @@ def generate_attack_story(sessions: Dict[str, Dict], timeline_events: List[Dict]
             else:
                 iso_ts = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
             story_lines.append(f"{iso_ts} | {evt['action']:<30} | {evt['source']} -> {evt['destination']} (Score: {evt['score']})")
-        
+
     out_story = "\n".join(story_lines)
-    
+
     with open(phase2_dir / "attack_story.txt", "w", encoding="utf-8") as f:
         f.write(out_story)
-        
+
     print("\n" + out_story)
 
 def build_attack_chains(
@@ -488,11 +488,11 @@ def build_attack_chains(
     phase2_dir: Path
 ) -> None:
     print(f"[Correlation] Loading data from {base_dir}")
-    
+
     # 1. Load Mappings
     linker_data = _load_json(base_dir / "flow_linker.json")
     zeek_to_suri = linker_data.get("zeek_uid_to_suricata_flow_id", {})
-    
+
     file_linker_data = _load_json(base_dir / "file_linker.json")
     hash_to_uid = file_linker_data.get("file_hash_to_zeek_uid", {})
     uid_to_hashes: Dict[str, List[str]] = {}
@@ -520,34 +520,34 @@ def build_attack_chains(
     conns = _load_json_lines(zeek_dir / "conn.json")
     http = _load_json_lines(zeek_dir / "http.json")
     dns = _load_json_lines(zeek_dir / "dns.json")
-    
+
     # 3.5. Hostname Identity Extraction
     ip_to_hostname = {}
-    
+
     dhcp = _load_json_lines(zeek_dir / "dhcp.json")
     for d in dhcp:
         ip = d.get("client_addr") or d.get("assigned_ip")
         name = d.get("host_name") or d.get("client_fqdn")
         if ip and name:
             ip_to_hostname[ip] = name
-            
+
     ntlm = _load_json_lines(zeek_dir / "ntlm.json")
     for n in ntlm:
         ip = n.get("id.orig_h")
         name = n.get("hostname")
         if ip and name:
             ip_to_hostname[ip] = name
-            
+
     kerberos = _load_json_lines(zeek_dir / "kerberos.json")
     for k in kerberos:
         ip = k.get("id.orig_h")
         name = k.get("client")
         if ip and name and "/" not in name:
             ip_to_hostname[ip] = name
-    
+
     # Organize zeek events by UID
     sessions: Dict[str, Dict] = {}
-    
+
     for c in conns:
         uid = c.get("uid")
         if uid:
@@ -582,7 +582,7 @@ def build_attack_chains(
                 "uri": h.get("uri"),
                 "method": h.get("method")
             })
-            
+
     for d in dns:
         uid = d.get("uid")
         if uid and uid in sessions:
@@ -599,7 +599,7 @@ def build_attack_chains(
     # 4. Attach Suricata Alerts using flow_id
     suri_dir = base_dir / "suricata"
     eve = _load_json_lines(suri_dir / "eve.json")
-    
+
     flow_to_alerts = {}
     for e in eve:
         if e.get("event_type") == "alert":
@@ -610,7 +610,7 @@ def build_attack_chains(
                     "signature": alert.get("signature"),
                     "severity": alert.get("severity")
                 })
-                
+
     for uid, sess in sessions.items():
         fid = zeek_to_suri.get(uid)
         if fid and fid in flow_to_alerts:
@@ -631,43 +631,43 @@ def build_attack_chains(
     for uid, sess in sessions.items():
         score = 0
         hits = []
-        
+
         # 5e. Volumetric Anomaly Detection
         src = sess.get("orig_h")
         target = (sess.get("orig_h"), sess.get("resp_h"), sess.get("resp_p"))
-        
+
         if src and src_conn_counts.get(src, 0) > VOLUMETRIC_THRESHOLD_DOS:
             score += 80
             hits.append(f"Volumetric Anomaly: High connection rate from {src} ({src_conn_counts[src]} Conns)")
         elif target[0] and target[1] and target_conn_counts.get(target, 0) > VOLUMETRIC_THRESHOLD_PORT_SCAN:
             score += 80
             hits.append(f"Volumetric Anomaly: Targeted attack on {target[1]}:{target[2]} ({target_conn_counts[target]} Conns)")
-            
+
         # 5a. Suricata Alerts
         if sess["suricata_alerts"]:
             score += 50
             hits.append(f"Suricata Alerts ({len(sess['suricata_alerts'])})")
-            
+
         # 5b. IP Intelligence
         for ip in [sess["orig_h"], sess["resp_h"]]:
             if not ip: continue
             intel = intel_by_ip.get(ip, {})
-            
+
             vt_score = intel.get("vt_malicious_count", 0) or 0
             if vt_score >= 5:
                 score += 30
                 hits.append(f"VT Malicious IP ({ip})")
-                
+
             if intel.get("is_malicious_ip"):
                 score += 20
             vt_score = intel.get("vt_malicious_count", 0) or 0
-            if vt_score >= 5: 
+            if vt_score >= 5:
                 score += 80
                 hits.append(f"VT ({vt_score} engines) on {ip}")
-            if intel.get("is_malicious_ip"): 
+            if intel.get("is_malicious_ip"):
                 score += 50
                 hits.append(f"AbuseIPDB (Malicious) on {ip}")
-            if intel.get("high_pulse_rate"): 
+            if intel.get("high_pulse_rate"):
                 score += 50
                 hits.append(f"OTX (High Pulse) on {ip}")
 
@@ -683,7 +683,7 @@ def build_attack_chains(
             if intel.get("high_pulse_rate"):
                 score += 50
                 hits.append(f"OTX (High Pulse) on {query}")
-                
+
         for h in sess["http"]:
             host = h.get("host")
             if not host: continue
@@ -695,7 +695,7 @@ def build_attack_chains(
             if intel.get("high_pulse_rate"):
                 score += 50
                 hits.append(f"OTX (High Pulse) on {host}")
-                
+
         # 5d. YARA Intelligence
         for fhash in sess["files"]:
             intel = intel_by_hash.get(fhash, {})
@@ -718,7 +718,7 @@ def build_attack_chains(
             orig_ip = sess.get("orig_h")
             resp_ip = sess.get("resp_h")
             resp_port = sess.get("resp_p")
-            
+
             def _is_int(ip):
                 if not ip: return False
                 try: return ipaddress.ip_address(ip).is_private
@@ -756,7 +756,7 @@ def build_attack_chains(
 
         sess["score"] = score
         sess["intel_hits"] = list(set(hits))
-        
+
         if score >= 80:
             sess["severity"] = "HIGH"
         elif score >= 40:
@@ -764,7 +764,7 @@ def build_attack_chains(
 
     # 5.5. Host-Centric Profiling
     host_profiles = {}
-    
+
     def is_internal(ip_str):
         if not ip_str:
             return False
@@ -777,23 +777,23 @@ def build_attack_chains(
     for uid, sess in sessions.items():
         if sess["score"] == 0:
             continue
-            
+
         orig_ip = sess.get("orig_h")
         resp_ip = sess.get("resp_h")
-        
+
         internal_ips = []
         external_ips = []
-        
+
         if orig_ip and is_internal(orig_ip):
             internal_ips.append((orig_ip, sess.get("orig_hostname")))
         elif orig_ip:
             external_ips.append(orig_ip)
-            
+
         if resp_ip and is_internal(resp_ip):
             internal_ips.append((resp_ip, sess.get("resp_hostname")))
         elif resp_ip:
             external_ips.append(resp_ip)
-            
+
         for ip, hostname in internal_ips:
             if ip not in host_profiles:
                 host_profiles[ip] = {
@@ -807,13 +807,13 @@ def build_attack_chains(
                     "contacted_ips": set(),
                     "first_seen": sess.get("ts", float('inf'))
                 }
-            
+
             profile = host_profiles[ip]
-            
+
             ts = sess.get("ts")
             if ts and ts < profile.get("first_seen", float('inf')):
                 profile["first_seen"] = ts
-                
+
             if "Volumetric" in " ".join(sess.get("intel_hits", [])):
                 if not profile.get("dos_counted"):
                     profile["infection_score"] += 80
@@ -822,19 +822,19 @@ def build_attack_chains(
             else:
                 profile["infection_score"] += sess["score"]
             profile["intel_hits"].update(sess.get("intel_hits", []))
-            
+
             for alert in sess.get("suricata_alerts", []):
                 profile["suricata_alerts"].add(alert.get("signature"))
-                
+
             profile["files"].update(sess.get("files", []))
-            
+
             for d in sess.get("dns", []):
                 if d.get("query"):
                     profile["contacted_domains"].add(d["query"])
             for h in sess.get("http", []):
                 if h.get("host"):
                     profile["contacted_domains"].add(h["host"])
-                    
+
             profile["contacted_ips"].update(external_ips)
 
     # Convert sets to lists for JSON serialization
@@ -852,10 +852,10 @@ def build_attack_chains(
     # 6. Output Generation
     high_sev = [s for s in sessions.values() if s["severity"] == "HIGH"]
     med_sev = [s for s in sessions.values() if s["severity"] == "MEDIUM"]
-    
+
     dos_aggregated = {}
     non_dos_high_sev = []
-    
+
     for s in high_sev:
         hit_str = " ".join(s.get("intel_hits", []))
         if "Volumetric" in hit_str:
@@ -889,11 +889,11 @@ def build_attack_chains(
                 if s.get("ts", 0) > dos_aggregated[key]["max_ts"]: dos_aggregated[key]["max_ts"] = s.get("ts", 0)
         else:
             non_dos_high_sev.append(s)
-            
+
     final_high_sev = non_dos_high_sev + list(dos_aggregated.values())
-    
+
     out_file = phase2_dir / "incidents_correlated.json"
-    
+
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump({
             "high_severity": high_sev,
@@ -901,18 +901,18 @@ def build_attack_chains(
             "total_high": len(high_sev),
             "total_medium": len(med_sev)
         }, f, indent=2)
-        
+
     # 7. Timeline Generation
     timeline_events = []
     story_sessions = [s for s in sessions.values() if s["score"] > 0]
-    
+
     for s in story_sessions:
         ts = s.get("ts")
         if not ts: continue
-        
+
         action = "Suspicious Network Activity"
         hit_str = " ".join(s.get("intel_hits", []))
-        
+
         if "Ransomware" in hit_str:
             action = "Ransomware Activity"
         elif "C2" in hit_str or "Backdoor" in hit_str:
@@ -927,9 +927,9 @@ def build_attack_chains(
             action = f"IDS Alert: {s['suricata_alerts'][0]['signature']}"
         elif "Volumetric" in hit_str:
             action = "Volumetric Anomaly"
-            
+
         domain_str = s["http"][0].get("host") if s["http"] else (s["dns"][0].get("query") if s["dns"] else "Unknown Domain")
-        
+
         timeline_events.append({
             "timestamp": ts,
             "action": action,
@@ -941,23 +941,23 @@ def build_attack_chains(
             "session_id": s["uid"],
             "details": s.get("intel_hits", [])[:3]
         })
-        
+
     timeline_events.sort(key=lambda x: x["timestamp"])
-    
+
     out_timeline_file = phase2_dir / "attack_timeline.json"
     with open(out_timeline_file, "w", encoding="utf-8") as f:
         json.dump(timeline_events, f, indent=2)
 
-    print(f"\n============================================================")
-    print(f" [Phase 3] CORRELATION COMPLETE")
-    print(f"============================================================")
-    
+    print("\n============================================================")
+    print(" [Phase 3] CORRELATION COMPLETE")
+    print("============================================================")
+
     stats_file = phase2_dir / "run_stats.json"
     pcap_hash = "Unknown (Run from Phase 3 manually)"
     if stats_file.exists():
         stats = _load_json(stats_file)
         pcap_hash = stats.get("forensic_integrity", {}).get("pcap_sha256", pcap_hash)
-        
+
     print(f" Input PCAP Hash: {pcap_hash}")
     print(f" Analyzed {len(sessions)} unique Zeek sessions.")
     print(f" Profiled {len(host_profiles)} internal hosts.")
@@ -966,7 +966,7 @@ def build_attack_chains(
     print(f" Output saved to: {out_file}")
     print(f" Host profiles saved to: {out_host_file}")
     print(f" Attack timeline saved to: {out_timeline_file}\n")
-    
+
     if timeline_events:
         print(" [ATTACK TIMELINE]")
         for evt in timeline_events[:10]:
@@ -979,7 +979,7 @@ def build_attack_chains(
         if len(timeline_events) > 10:
             print(f"   ... and {len(timeline_events) - 10} more events in attack_timeline.json")
         print("\n" + "="*60)
-    
+
     top_hosts = sorted(host_profiles.values(), key=lambda x: x["infection_score"], reverse=True)[:5]
     if top_hosts:
         print(" [HOST-CENTRIC VIEW (TOP INFECTED HOSTS)]")
@@ -995,17 +995,17 @@ def build_attack_chains(
             if h["contacted_domains"]:
                 print(f"   - External Domains: {len(h['contacted_domains'])}")
         print("\n" + "="*60)
-        
+
     top_incidents = sorted(final_high_sev + med_sev, key=lambda x: x['score'], reverse=True)[:5]
     if top_incidents:
         print(" [ATTACK CHAINS (TOP DETECTIONS)]")
         for i, s in enumerate(top_incidents, 1):
             domain_str = s["http"][0].get("host") if s["http"] else (s["dns"][0].get("query") if s["dns"] else "Unknown Domain")
             file_str = s["files"][0][:8] if s["files"] else "No File"
-            
+
             orig_host_str = f" ({s['orig_hostname']})" if s.get('orig_hostname') else ""
             resp_host_str = f" ({s['resp_hostname']})" if s.get('resp_hostname') else ""
-            
+
             print(f"\n 💥 INCIDENT {i} (Score: {s['score']})")
             print(f" ├── Source IP: {s['orig_h']}{orig_host_str}:{s['orig_p']}")
             print(f" ├── Dest IP:   {s['resp_h']}{resp_host_str}:{s['resp_p']}")
@@ -1013,16 +1013,16 @@ def build_attack_chains(
             print(f" ├── Domain:    {domain_str}")
             print(f" ├── Session:   {s['uid']}")
             print(f" └── File Hash: {file_str}")
-            
+
             if s["intel_hits"]:
-                print(f"\n 🔍 INTELLIGENCE HITS:")
+                print("\n 🔍 INTELLIGENCE HITS:")
                 for hit in s["intel_hits"][:5]:
                     print(f"   - {hit}")
                 if len(s["intel_hits"]) > 5:
                     print(f"   - ... and {len(s['intel_hits']) - 5} more hits.")
-                    
+
             if s["suricata_alerts"]:
-                print(f"\n 🚨 SURICATA ALERTS:")
+                print("\n 🚨 SURICATA ALERTS:")
                 # Use a set to unique the alerts for display
                 unique_alerts = list(set([a["signature"] for a in s["suricata_alerts"]]))
                 for alert in unique_alerts[:5]:
@@ -1030,7 +1030,7 @@ def build_attack_chains(
                 if len(unique_alerts) > 5:
                     print(f"   - ... and {len(unique_alerts) - 5} more alerts.")
             print("\n" + "-"*60)
-            
+
         if len(final_high_sev) > 5:
             print(f"\n   ... and {len(final_high_sev) - 5} more High Severity incidents in the JSON report.")
 
@@ -1041,16 +1041,16 @@ def main():
     parser = argparse.ArgumentParser(description="Phase 3 Correlation Engine")
     parser.add_argument("data_lake", type=Path, help="Path to processed data lake (e.g. processed/Hive_06...)")
     parser.add_argument("phase2_dir", type=Path, help="Path to Phase 2 output dir (e.g. phase2_output/Hive_...)")
-    
+
     args = parser.parse_args()
-    
+
     data_lake = args.data_lake.resolve()
     phase2_dir = args.phase2_dir.resolve()
-    
+
     if not data_lake.exists() or not phase2_dir.exists():
         print("Error: Invalid paths provided.")
         return
-        
+
     build_attack_chains(data_lake, phase2_dir)
 
 if __name__ == "__main__":

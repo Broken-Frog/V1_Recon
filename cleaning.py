@@ -114,7 +114,7 @@ def clean_and_deduplicate(raw_iocs: List[Dict]) -> Tuple[List[Dict], Dict[str, i
             ip_str = ip_str.strip()
             try:
                 ip_obj = ipaddress.ip_address(ip_str)
-                
+
                 if ip_obj.is_unspecified:
                     tag = "UNSPECIFIED"        # 0.0.0.0
                 elif ip_obj.is_multicast:
@@ -129,19 +129,19 @@ def clean_and_deduplicate(raw_iocs: List[Dict]) -> Tuple[List[Dict], Dict[str, i
                     tag = "EXTERNAL"
                 else:
                     tag = "UNKNOWN"
-                    
+
                 ioc["network_zone"] = tag
-                
+
                 if tag == "INTERNAL":
                     ioc["is_private"] = True
-                    
+
                 if tag in ("UNSPECIFIED", "MULTICAST", "RESERVED", "LOOPBACK"):
                     dropped_special_ips += 1
                     continue
-                    
+
             except ValueError:
                 pass
-                
+
             if ip_str.lower().startswith("fe80:"):
                 ioc["network_zone"] = "LOCAL_LINK"
                 ioc["reduce_weight"] = True

@@ -147,7 +147,7 @@ def _print_summary(stats: Dict[str, Any], iocs_path: Path, stats_path: Path) -> 
         for label, value in rows:
             print(f"    {label:<30} {value}")
 
-    print(f"\n  Output files:")
+    print("\n  Output files:")
     print(f"    IOCs  → {iocs_path}")
     print(f"    Stats → {stats_path}")
     print(f"{sep}\n")

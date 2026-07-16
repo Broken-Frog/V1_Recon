@@ -150,7 +150,7 @@ async def _call_vt_api(
 ) -> Optional[Dict[str, Any]]:
     if not VT_API_KEY:
         return {}
-    
+
     url = _vt_url_for(ioc, ioc_type)
     headers = {"x-apikey": VT_API_KEY}
 
@@ -171,12 +171,12 @@ async def _call_vt_api(
                     retry_after = float(resp.headers.get("Retry-After", VT_RATE_WINDOW))
                     await asyncio.sleep(retry_after)
                     continue
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             pass
-        
+
         if attempt < VT_MAX_RETRIES:
             await asyncio.sleep(VT_RETRY_BACKOFF * (2 ** (attempt - 1)))
-            
+
     return {}
 
 
@@ -215,12 +215,12 @@ async def _call_abuseipdb_api(
                 elif resp.status == 429:
                     await asyncio.sleep(VT_RATE_WINDOW)
                     continue
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             pass
-            
+
         if attempt < VT_MAX_RETRIES:
             await asyncio.sleep(VT_RETRY_BACKOFF * (2 ** (attempt - 1)))
-            
+
     return {}
 
 
@@ -263,7 +263,7 @@ async def _call_otx_api(
                 elif resp.status == 429:
                     await asyncio.sleep(VT_RATE_WINDOW)
                     continue
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             pass
 
         if attempt < VT_MAX_RETRIES:
@@ -303,25 +303,25 @@ async def _enrich_one(
             return
 
         stats["api_calls_made"] += 1
-        
+
         vt_task = _call_vt_api(session, ioc_value, ioc_type, vt_bucket)
         abuse_task = _call_abuseipdb_api(session, ioc_value, ioc_type, abuse_bucket)
         otx_task = _call_otx_api(session, ioc_value, ioc_type, otx_bucket)
-        
+
         vt_res, abuse_res, otx_res = await asyncio.gather(vt_task, abuse_task, otx_task)
-        
+
         apis_used = []
         if VT_API_KEY: apis_used.append("VirusTotal")
         if ABUSEIPDB_API_KEY and ioc_type == "ip": apis_used.append("AbuseIPDB")
         if OTX_API_KEY: apis_used.append("OTX AlienVault")
-        
+
         scanned_records.append({
             "ioc_value": ioc_value,
             "ioc_type": ioc_type,
             "apis_scanned": apis_used,
             "timestamp": time.time()
         })
-        
+
         enrichment = {}
         if vt_res: enrichment.update(vt_res)
         if abuse_res: enrichment.update(abuse_res)
@@ -361,7 +361,7 @@ async def enrich_iocs_async(
         ip = ioc.get("ip")
         fhash = ioc.get("file_hash")
         domain = ioc.get("domain") # Assuming domains might be extracted
-        
+
         if ip and not ioc.get("is_private", False):
             work_items.add((ip, "ip"))
         if fhash:
@@ -381,7 +381,7 @@ async def enrich_iocs_async(
     vt_bucket    = _TokenBucket(rate=VT_MAX_PER_WINDOW, window=VT_RATE_WINDOW)
     abuse_bucket = _TokenBucket(rate=ABUSEIPDB_MAX_PER_WINDOW, window=ABUSEIPDB_RATE_WINDOW)
     otx_bucket   = _TokenBucket(rate=OTX_MAX_PER_WINDOW, window=OTX_RATE_WINDOW)
-    
+
     max_concurrency = max(VT_MAX_CONCURRENT, ABUSEIPDB_MAX_CONCURRENT, OTX_MAX_CONCURRENT)
     semaphore = asyncio.Semaphore(max_concurrency)
     connector = aiohttp.TCPConnector(limit=max_concurrency, ssl=True)
@@ -403,21 +403,21 @@ async def enrich_iocs_async(
             )
             for value, itype in work_items
         ]
-        
+
         total_tasks = len(tasks)
         completed = 0
         sys.stdout.write(f"\r[Enrichment] Progress: [0/{total_tasks}] 0% completed")
         sys.stdout.flush()
-        
+
         for f in asyncio.as_completed(tasks):
             await f
             completed += 1
             pct = int((completed / total_tasks) * 100)
             sys.stdout.write(f"\r[Enrichment] Progress: [{completed}/{total_tasks}] {pct}% completed")
             sys.stdout.flush()
-            
+
         print()
-        
+
     if scanned_records:
         log_file = OUTPUT_DIR / "scanned_iocs_by_api.json"
         with open(log_file, "w", encoding="utf-8") as f:
